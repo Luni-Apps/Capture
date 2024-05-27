@@ -50,6 +50,7 @@ public final class Camera: NSObject, ObservableObject {
     var devicePosition: CameraPosition
     var recordingSettings: RecordingSettings?
     var isAudioEnabled: Bool
+    var isWideAngleEnabled: Bool
 
     // MARK: - Public API
 
@@ -71,15 +72,19 @@ public final class Camera: NSObject, ObservableObject {
     /// - parameter position: the initial AVCaptureDevice.Position to use
     /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
     /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
+    /// - parameter wideAngleEnabled: whether camera devices with a wide angle (or ultra wide angle) should be supported.
+    /// This parameter only affects iOS. The default value is `true`.
     ///
     public convenience init(
         _ position: CameraPosition,
-        audioEnabled: Bool = true
+        audioEnabled: Bool = true,
+        wideAngleEnabled: Bool = true
     ) {
         self.init(
             position: position,
             preset: .high,
-            audioEnabled: audioEnabled
+            audioEnabled: audioEnabled,
+            wideAngleEnabled: wideAngleEnabled
         )
     }
 
@@ -89,15 +94,19 @@ public final class Camera: NSObject, ObservableObject {
     /// - parameter preset: the capture session's preset to use
     /// - parameter audioEnabled: whether audio should be enabled when recording videos. The default value is `true`.
     /// Typically set this value to `false` when using the Camera to only take pictures, avoiding to requesting audio permissions.
+    /// - parameter wideAngleEnabled: whether camera devices with a wide angle (or ultra wide angle) should be supported.
+    /// This parameter only affects iOS. The default value is `true`.
     ///
     public required init(
         position: CameraPosition,
         preset: AVCaptureSession.Preset,
-        audioEnabled: Bool = true
+        audioEnabled: Bool = true,
+        wideAngleEnabled: Bool = true
     ) {
         devicePosition = position
         sessionPreset = preset
         isAudioEnabled = audioEnabled
+        isWideAngleEnabled = wideAngleEnabled
         previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         super.init()
         #if os(iOS)
@@ -252,14 +261,20 @@ public final class Camera: NSObject, ObservableObject {
 #if os(iOS)
         var deviceTypes: [AVCaptureDevice.DeviceType] = [
             .builtInDualCamera,
-            .builtInDualWideCamera,
-            .builtInUltraWideCamera,
             .builtInLiDARDepthCamera,
             .builtInTelephotoCamera,
             .builtInTripleCamera,
             .builtInTrueDepthCamera,
-            .builtInWideAngleCamera,
         ]
+
+        if isWideAngleEnabled {
+            deviceTypes.append(contentsOf: [
+                .builtInDualWideCamera,
+                .builtInUltraWideCamera,
+                .builtInWideAngleCamera,
+            ])
+        }
+
         if #available(iOS 17, *) {
             deviceTypes.append(.continuityCamera)
         }
@@ -268,6 +283,7 @@ public final class Camera: NSObject, ObservableObject {
             .builtInWideAngleCamera,
             .deskViewCamera,
         ]
+
         if #available(macOS 14.0, *) {
             deviceTypes.append(.continuityCamera)
             deviceTypes.append(.external)
