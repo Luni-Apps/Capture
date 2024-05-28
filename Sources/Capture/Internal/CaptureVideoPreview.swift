@@ -28,7 +28,10 @@ struct CaptureVideoPreview: ViewRepresentable {
     }
 
     func updateUIView(_ view: AVCaptureVideoPreviewView, context: Context) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         view.videoPreviewLayer.videoGravity = videoGravity
+        CATransaction.commit()
     }
 
     func makeCoordinator() -> Coordinator {
@@ -97,29 +100,36 @@ final class AVCaptureVideoPreviewView: UIView {
     override func didMoveToSuperview() {
         super.didMoveToSuperview()
         if superview != nil {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
             layer.addSublayer(videoPreviewLayer)
             videoPreviewLayer.frame = bounds
+            CATransaction.commit()
         }
     }
-    
+
     override func layoutSubviews() {
         super.layoutSubviews()
-        videoPreviewLayer.frame = bounds
+
+        if videoPreviewLayer.frame != bounds {
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            videoPreviewLayer.frame = bounds
+            CATransaction.commit()
+        }
 
         if let connection = videoPreviewLayer.connection, connection.isVideoOrientationSupported {
-            let deviceOrientation = UIDevice.current.orientation
-            switch deviceOrientation {
-            case .portrait:
-                connection.videoOrientation = .portrait
-            case .portraitUpsideDown:
-                connection.videoOrientation = .portraitUpsideDown
-            case .landscapeLeft:
-                connection.videoOrientation = .landscapeRight
-            case .landscapeRight:
-                connection.videoOrientation = .landscapeLeft
-            default:
-                connection.videoOrientation = .portrait
-            }
+            connection.updateVideoOrientation(UIDevice.current.orientation)
+        }
+    }
+}
+
+extension AVCaptureConnection {
+
+    func updateVideoOrientation(_ deviceOrientation: UIDeviceOrientation) {
+        let videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
+        if self.videoOrientation != videoOrientation {
+            self.videoOrientation = videoOrientation
         }
     }
 }
