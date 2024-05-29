@@ -9,12 +9,14 @@ import SwiftUI
 
 public struct TakePictureAction {
 
-    var handler: () async -> Void = {
+    public typealias PreviewHandler = (Int64, CGImage?) -> Void
+
+    var handler: (PreviewHandler?) async -> Void = { _ in
         assertionFailure("@Environment(\\.takePicture) must be accessed from a camera overlay view")
     }
 
-    public func callAsFunction() {
-        Task { await handler() }
+    public func callAsFunction(_ previewHandler: PreviewHandler? = nil) {
+        Task { await handler(previewHandler) }
     }
 }
 

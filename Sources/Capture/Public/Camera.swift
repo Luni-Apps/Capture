@@ -24,6 +24,13 @@ public final class Camera: NSObject, ObservableObject {
     private let sessionQueue = DispatchQueue(label: "\(bundleIdentifier).Camera.Session")
     private let sessionPreset: AVCaptureSession.Preset
 
+    private let previewQueue = DispatchQueue(
+      label: "\(bundleIdentifier).Camera.VideoOutput",
+      qos: .userInitiated,
+      attributes: [],
+      autoreleaseFrequency: .workItem
+    )
+
     private var isCaptureSessionConfigured = false
 
     public private(set) var captureDevice: AVCaptureDevice? {
@@ -39,11 +46,12 @@ public final class Camera: NSObject, ObservableObject {
 
     private var captureMovieFileOutput: AVCaptureMovieFileOutput?
     private var capturePhotoOutput: AVCapturePhotoOutput?
+    private var captureVideoDataOutput: AVCaptureVideoDataOutput?
     private var captureVideoInput: AVCaptureDeviceInput?
     private var captureVideoFileOutput: AVCaptureVideoFileOutput?
 
     private var didStopRecording: ((Result<URL, Error>) -> Void)?
-    private var didTakePicture: ((Result<AVCapturePhoto, Error>) -> Void)?
+    private var didTakePicture: [(Result<AVCapturePhoto, Error>) -> Void] = []
 
     // MARK: - Internal Properties
     
@@ -55,6 +63,8 @@ public final class Camera: NSObject, ObservableObject {
     // MARK: - Public API
 
     public private(set) var previewLayer: AVCaptureVideoPreviewLayer
+
+    private var previewPixelBuffer: CVPixelBuffer?
 
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
@@ -239,17 +249,17 @@ public final class Camera: NSObject, ObservableObject {
         }
     }
 
-    public func takePicture() async throws -> AVCapturePhoto {
+    public func takePicture(_ previewHandler: ((Int64, CGImage?) -> Void)? = nil) async throws -> AVCapturePhoto {
         guard let photoOutput = capturePhotoOutput else {
             throw CameraError.missingPhotoOutput
         }
 
-        defer { didTakePicture = nil }
+        let photoSettings = photoOutput.photoSettings()
+        previewHandler?(photoSettings.uniqueID, CGImage.create(from: previewPixelBuffer))
 
         return try await withCheckedThrowingContinuation { continuation in
-            didTakePicture = { continuation.resume(with: $0) }
+            didTakePicture.insert({ continuation.resume(with: $0) }, at: 0)
             sessionQueue.async {
-                let photoSettings = photoOutput.photoSettings()
                 photoOutput.capturePhoto(with: photoSettings, delegate: self)
             }
         }
@@ -420,6 +430,9 @@ public final class Camera: NSObject, ObservableObject {
         // Configure photo capture
         let photoOutput = AVCapturePhotoOutput()
         photoOutput.maxPhotoQualityPrioritization = .quality
+//        if #available(iOS 17.0, *), photoOutput.isAutoDeferredPhotoDeliverySupported {
+//            photoOutput.isAutoDeferredPhotoDeliveryEnabled = true
+//        }
         if captureSession.canAddOutput(photoOutput) {
             captureSession.addOutput(photoOutput)
             capturePhotoOutput = photoOutput
@@ -515,6 +528,15 @@ public final class Camera: NSObject, ObservableObject {
                 captureMovieFileOutput = moveFileOutput
             } else {
                 log(.cannotAddVideoFileOutput)
+            }
+        }
+
+        if captureVideoDataOutput == nil {
+            let videoDataOutput = AVCaptureVideoDataOutput()
+            videoDataOutput.setSampleBufferDelegate(self, queue: previewQueue)
+            if captureSession.canAddOutput(videoDataOutput) {
+                captureSession.addOutput(videoDataOutput)
+                captureVideoDataOutput = videoDataOutput
             }
         }
 
@@ -680,10 +702,56 @@ extension Camera: AVCapturePhotoCaptureDelegate {
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        if let error {
-            didTakePicture?(.failure(error))
-        } else {
-            didTakePicture?(.success(photo))
+//        if #available(iOS 17.0, *), output.isAutoDeferredPhotoDeliverySupported {
+//            return // Do nothing
+//        }
+        if let didTakePicture = didTakePicture.popLast() {
+            if let error {
+                didTakePicture(.failure(error))
+            } else {
+                didTakePicture(.success(photo))
+            }
         }
+    }
+
+//    @available(iOS 17.0, *)
+//    public func photoOutput(
+//        _ output: AVCapturePhotoOutput,
+//        didFinishCapturingDeferredPhotoProxy deferredPhotoProxy: AVCaptureDeferredPhotoProxy?,
+//        error: (any Error)?
+//    ) {
+//        if let deferredPhotoProxy, let didTakePicture = didTakePicture.popLast() {
+//            if let error {
+//                didTakePicture(.failure(error))
+//            } else {
+//                didTakePicture(.success(deferredPhotoProxy))
+//            }
+//        }
+//    }
+}
+
+extension Camera: AVCaptureVideoDataOutputSampleBufferDelegate {
+
+    public func captureOutput(
+        _ output: AVCaptureOutput,
+        didOutput sampleBuffer: CMSampleBuffer,
+        from connection: AVCaptureConnection
+    ) {
+        if let buffer = sampleBuffer.imageBuffer {
+            DispatchQueue.main.async {
+                self.previewPixelBuffer = buffer
+            }
+        }
+    }
+}
+
+import VideoToolbox
+
+extension CGImage {
+    static func create(from pixelBuffer: CVPixelBuffer?) -> CGImage? {
+        guard let pixelBuffer else { return nil }
+        var image: CGImage?
+        VTCreateCGImageFromCVPixelBuffer(pixelBuffer, options: nil,imageOut: &image)
+        return image
     }
 }

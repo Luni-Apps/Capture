@@ -17,6 +17,7 @@ public struct CameraViewOptions {
 public struct CameraView<CameraOverlay: View>: View {
 
     @Binding var outputImage: PlatformImage?
+    @Binding var outputPhoto: AVCapturePhoto?
     @Binding var outputVideo: URL?
     var options: CameraViewOptions
     var cameraOverlay: ((AVAuthorizationStatus) -> CameraOverlay)
@@ -25,8 +26,11 @@ public struct CameraView<CameraOverlay: View>: View {
     @StateObject private var camera: Camera
 
     @State private var authorizationStatus: AVAuthorizationStatus
-    @State private var outputSize: CGSize = .zero
+    @State private var outputSize: CGSize = CGSize(width: 1080, height: 1920)
     @State private var showsTakePictureFeedback: Bool = false
+
+    private enum OutputPictureMode { case uiImage, avCapturePhoto }
+    private var outputPictureMode: OutputPictureMode
 
     public init(
         camera: Camera = .default,
@@ -39,21 +43,37 @@ public struct CameraView<CameraOverlay: View>: View {
         _authorizationStatus = State(initialValue: authorizationStatus)
         _camera = StateObject(wrappedValue: camera)
         _outputImage = outputImage
+        _outputPhoto = .constant(nil)
         _outputVideo = outputVideo
         self.options = options
+        self.outputPictureMode = .uiImage
         self.cameraOverlay = overlay
     }
+
+    public init(
+        camera: Camera = .default,
+        outputPhoto: Binding<AVCapturePhoto?> = .constant(nil),
+        outputVideo: Binding<URL?> = .constant(nil),
+        options: CameraViewOptions = .default,
+        @ViewBuilder overlay: @escaping ((AVAuthorizationStatus) -> CameraOverlay)
+    ) {
+        let authorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        _authorizationStatus = State(initialValue: authorizationStatus)
+        _camera = StateObject(wrappedValue: camera)
+        _outputImage = .constant(nil)
+        _outputPhoto = outputPhoto
+        _outputVideo = outputVideo
+        self.options = options
+        self.outputPictureMode = .avCapturePhoto
+        self.cameraOverlay = overlay
+    }
+
 
     public var body: some View {
         ZStack {
             if case .authorized = authorizationStatus {
-                CaptureVideoPreview(
-                    isPaused: camera.isPreviewPaused
-                )
-                .blur(radius: camera.isPreviewPaused ? 20 : 0, opaque: true)
-                .animation(.spring, value: camera.isPreviewPaused)
-                .getSize($outputSize)
-                .ignoresSafeArea()
+                CaptureVideoPreview(isPaused: camera.isPreviewPaused)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
             if showsTakePictureFeedback {
@@ -63,12 +83,23 @@ public struct CameraView<CameraOverlay: View>: View {
             cameraOverlay(authorizationStatus)
         }
         .environmentObject(camera)
-        .environment(\.takePicture, TakePictureAction {
+        .environment(\.takePicture, TakePictureAction { previewHandler in
             if options.isTakePictureFeedbackEnabled {
                 showsTakePictureFeedback = true
             }
 
-            outputImage = await camera.takePicture(outputSize: outputSize)
+            switch outputPictureMode {
+                case .uiImage:
+                    outputImage = await camera.takePicture(outputSize: outputSize, previewHandler)
+                case .avCapturePhoto:
+                    do {
+                        outputPhoto = try await camera.takePicture(previewHandler)
+                    } catch {
+                        logger.error("Failed taking picture")
+                    }
+            }
+
+            showsTakePictureFeedback = false
         })
         .environment(\.recordVideo, RecordVideoAction(start: camera.startRecording) {
             outputVideo = await camera.stopRecording()
