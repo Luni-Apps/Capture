@@ -66,6 +66,7 @@ public final class Camera: NSObject, ObservableObject {
 
     private var previewPixelBuffer: CVPixelBuffer?
 
+    @Published public var flashMode: FlashMode = .auto
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
     @Published public private(set) var devices: [AVCaptureDevice] = []
@@ -255,6 +256,9 @@ public final class Camera: NSObject, ObservableObject {
         }
 
         let photoSettings = photoOutput.photoSettings()
+        if captureDevice?.hasFlash == true {
+            photoSettings.flashMode = flashMode
+        }
         previewHandler?(photoSettings.uniqueID, CGImage.create(from: previewPixelBuffer))
 
         return try await withCheckedThrowingContinuation { continuation in
