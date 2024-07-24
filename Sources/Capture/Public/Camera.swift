@@ -261,6 +261,11 @@ public final class Camera: NSObject, ObservableObject {
         if captureDevice?.hasFlash == true {
             photoSettings.flashMode = flashMode
         }
+        if let photoOutputConnection = photoOutput.connection(with: .video) {
+            let deviceOrientation = await UIDevice.current.orientation
+            let videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
+            photoOutputConnection.videoOrientation = videoOrientation
+        }
         previewHandler?(photoSettings.uniqueID, CGImage.create(from: previewPixelBuffer))
 
         return try await withCheckedThrowingContinuation { continuation in
