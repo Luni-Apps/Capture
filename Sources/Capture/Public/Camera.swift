@@ -66,7 +66,7 @@ public final class Camera: NSObject, ObservableObject {
 
     private var previewPixelBuffer: CVPixelBuffer?
 
-    @Published public var flashMode: FlashMode = .auto
+    @Published public var flashMode: FlashMode
     @Published public private(set) var isRecording: Bool = false
     @Published public private(set) var isPreviewPaused: Bool = false
     @Published public private(set) var devices: [AVCaptureDevice] = []
@@ -112,12 +112,14 @@ public final class Camera: NSObject, ObservableObject {
         position: CameraPosition,
         preset: AVCaptureSession.Preset,
         audioEnabled: Bool = true,
-        wideAngleEnabled: Bool = true
+        wideAngleEnabled: Bool = true,
+        initialFlashMode: FlashMode = .off
     ) {
         devicePosition = position
         sessionPreset = preset
         isAudioEnabled = audioEnabled
         isWideAngleEnabled = wideAngleEnabled
+        flashMode = initialFlashMode
         previewLayer = AVCaptureVideoPreviewLayer(session: captureSession)
         super.init()
         #if os(iOS)
