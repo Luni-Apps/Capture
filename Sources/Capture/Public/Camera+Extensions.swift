@@ -15,8 +15,9 @@ extension Camera {
             let capturePhoto = try await takePicture(previewHandler)
 //            let captureId = capturePhoto.resolvedSettings.uniqueID
             let image = PlatformImage(photo: capturePhoto)
+            return image
 #if os(iOS)
-            return image?.fixOrientation().scaleToFill(in: outputSize)
+//            return image?.fixOrientation().scaleToFill(in: outputSize)
 #elseif os(macOS)
             return image?.scaleToFill(in: outputSize)
 #endif
