@@ -84,9 +84,9 @@ public struct CameraView<CameraOverlay: View>: View {
         }
         .environmentObject(camera)
         .environment(\.takePicture, TakePictureAction { previewHandler in
-            if options.isTakePictureFeedbackEnabled {
-                showsTakePictureFeedback = true
-            }
+//            if options.isTakePictureFeedbackEnabled {
+//                showsTakePictureFeedback = true
+//            }
 
             switch outputPictureMode {
                 case .uiImage:
@@ -99,13 +99,17 @@ public struct CameraView<CameraOverlay: View>: View {
                     }
             }
 
-            showsTakePictureFeedback = false
+//            showsTakePictureFeedback = false
         })
         .environment(\.recordVideo, RecordVideoAction(start: camera.startRecording) {
             outputVideo = await camera.stopRecording()
         })
         .onChange(of: recordingSettings) { recordingSettings in
             camera.updateRecordingSettings(recordingSettings)
+        }
+        .onChange(of: outputPhoto) { _ in
+            guard options.isTakePictureFeedbackEnabled else { return }
+            showsTakePictureFeedback = true
         }
         .onAppear {
             camera.updateRecordingSettings(recordingSettings)
