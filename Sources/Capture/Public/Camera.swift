@@ -263,8 +263,12 @@ public final class Camera: NSObject, ObservableObject {
         }
         if let photoOutputConnection = photoOutput.connection(with: .video) {
             let deviceOrientation = await UIDevice.current.orientation
-            let videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
-            photoOutputConnection.videoOrientation = videoOrientation
+            if #available(iOS 17.0, *) {
+                photoOutputConnection.videoRotationAngle = deviceOrientation.rotationAngleValue
+            } else {
+                let videoOrientation = AVCaptureVideoOrientation(deviceOrientation)
+                photoOutputConnection.videoOrientation = videoOrientation
+            }
         }
         previewHandler?(photoSettings.uniqueID, CGImage.create(from: previewPixelBuffer))
 
